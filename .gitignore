@@ -1,0 +1,54 @@
+# Lua bytecode
+*.luac
+
+# Neovim swap, backup, and undo files
+*.swp
+*.swo
+*.swn
+*.bak
+*.un~
+
+# Logs and temp files
+*.log
+*.tmp
+*.out
+*.DS_Store  # macOS metadata files
+Thumbs.db    # Windows thumbnail cache
+ehthumbs.db
+
+# Plugin-specific cache
+.cache/
+.nvim_cache/
+session.vim
+
+# Dependencies (if using Packer or Lazy.nvim)
+plugin/packer_compiled.lua
+lazy-lock.json
+
+# Tests and debugging
+tests/output/
+tests/results/
+coverage/
+luacov.*
+
+# Node.js (if using external tooling)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Python virtual environment (if using Python helpers)
+venv/
+__pycache__/
+*.pyc
+
+# System-specific
+*.bak
+*.sw?
+*~
+
+# Git and editor settings
+.idea/
+.vscode/
+
+.envrc
+.env
