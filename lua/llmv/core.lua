@@ -19,7 +19,7 @@ local function process_bash_commands(input_line)
 	return input_line
 end
 
--- Function to extract chat history (keep your existing implementation)
+-- Function to extract chat history
 local function extract_chat_parts()
 	local lines = api.nvim_buf_get_lines(0, 0, -1, false)
 	local chat_history = {}
@@ -80,7 +80,6 @@ local function extract_chat_parts()
 	end
 
 	print("Chat history entries:", #chat_history)
-
 	print("Latest prompt:", latest_prompt)
 
 	return chat_history, latest_prompt
@@ -96,6 +95,8 @@ local function stream_response_init()
 end
 
 local function handle_stream_line(data_line)
+	print("Processing line:", vim.inspect(data_line)) -- Debug log
+
 	if not data_line or data_line == "" then
 		return
 	end
@@ -109,13 +110,13 @@ local function handle_stream_line(data_line)
 	-- Parse JSON and extract content
 	local success, decoded = pcall(vim.json.decode, clean_chunk)
 	if not success then
+		print("JSON decode failed:", vim.inspect(clean_chunk)) -- Debug log
 		return
 	end
 
-	local content = decoded.choices
-		and decoded.choices[1]
-		and decoded.choices[1].delta
-		and decoded.choices[1].delta.content
+	-- Claude's streaming format
+	local content = decoded.delta and decoded.delta.text
+	print("Extracted content:", vim.inspect(content)) -- Debug log
 
 	if not content or content == "" then
 		return
@@ -163,27 +164,35 @@ function M.run_llm()
 		return
 	end
 
-	local api_key = os.getenv("OPENAI_API_KEY")
+	local api_key = os.getenv("ANTHROPIC_API_KEY")
 	if not api_key then
-		print("Error: OPENAI_API_KEY is not set.")
+		print("Error: ANTHROPIC_API_KEY is not set.")
 		return
 	end
 
-	-- Prepare messages
-	local messages = {
-		{ role = "system", content = "You are a helpful AI. Respond concisely." },
-	}
+	-- Prepare messages in Claude's format
+	local messages = {}
 	for _, msg in ipairs(chat_history) do
-		table.insert(messages, msg)
+		table.insert(messages, {
+			role = msg.role == "user" and "user" or "assistant",
+			content = msg.content,
+		})
 	end
 	table.insert(messages, { role = "user", content = new_prompt })
 
-	-- Prepare JSON data
+	-- Debug log the messages being sent
+	print("Messages being sent:", vim.inspect(messages))
+
+	-- Prepare JSON data for Claude
 	local json_data = vim.json.encode({
-		model = "chatgpt-4o-latest",
+		model = "claude-3-5-sonnet-20241022",
 		messages = messages,
 		stream = true,
+		max_tokens = 4096, -- Maximum tokens for Sonnet
+		temperature = 0.7, -- Default temperature, adjust as needed
 	})
+
+	print("Sending request to Claude API...") -- Debug log
 
 	-- Initialize response in buffer
 	stream_response_init()
@@ -193,17 +202,21 @@ function M.run_llm()
 		"curl",
 		"-N", -- Disable buffering
 		"-s", -- Silent mode
-		"https://api.openai.com/v1/chat/completions",
+		"-v", -- Add verbose output for debugging
+		"https://api.anthropic.com/v1/messages",
 		"-H",
 		"Content-Type: application/json",
 		"-H",
-		"Authorization: Bearer " .. api_key,
+		"x-api-key: " .. api_key,
+		"-H",
+		"anthropic-version: 2023-06-01",
 		"--data-raw",
 		json_data,
 	}, {
 		stdout_buffered = false,
 		on_stdout = function(_, data)
 			if data then
+				print("Received stdout data:", vim.inspect(data)) -- Debug log
 				for _, line in ipairs(data) do
 					if line ~= "" then
 						vim.schedule(function()
@@ -215,6 +228,7 @@ function M.run_llm()
 		end,
 		on_stderr = function(_, data)
 			if data then
+				print("Received stderr data:", vim.inspect(data)) -- Debug log
 				for _, line in ipairs(data) do
 					if line ~= "" then
 						print("Error:", line)
@@ -223,6 +237,7 @@ function M.run_llm()
 			end
 		end,
 		on_exit = function(_, code)
+			print("Request finished with code:", code) -- Debug log
 			if code ~= 0 then
 				print("Request failed with exit code:", code)
 			end
