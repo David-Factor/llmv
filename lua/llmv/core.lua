@@ -1,6 +1,24 @@
 local M = {}
 local api = vim.api
 
+-- Function to process bash commands
+local function process_bash_commands(input_line)
+	for command in input_line:gmatch("@bash%(`(.-)`%)") do
+		local handle, err = io.popen(command)
+
+		if handle then
+			local result = handle:read("*a")
+			-- Trim any trailing newlines
+			result = result:gsub("%s+$", "")
+			input_line = input_line:gsub("@bash%(`" .. command .. "`%)", result)
+		else
+			print("An error occurred when trying to execute the command: ", err)
+		end
+	end
+
+	return input_line
+end
+
 -- Function to extract chat history (keep your existing implementation)
 local function extract_chat_parts()
 	local lines = api.nvim_buf_get_lines(0, 0, -1, false)
@@ -38,15 +56,31 @@ local function extract_chat_parts()
 
 	-- Check if we ended with a prompt (no response yet)
 	if in_prompt and current_prompt and current_prompt ~= "" then
-		latest_prompt = current_prompt
-	-- If we ended with a completed pair, add it to history
+		-- Check if there's actually a bash command before processing
+		if current_prompt:match("@bash%(`.-`%)") then
+			latest_prompt = process_bash_commands(current_prompt)
+
+			-- Split the output into lines if it contains newlines
+			local output_lines = {}
+			table.insert(output_lines, "# Output:")
+			for line in latest_prompt:gmatch("[^\r\n]+") do
+				table.insert(output_lines, line)
+			end
+			table.insert(output_lines, "# End Output")
+
+			-- Set the lines properly
+			api.nvim_buf_set_lines(0, -1, -1, false, output_lines)
+		else
+			-- If no bash command, just use the prompt as is
+			latest_prompt = current_prompt
+		end
 	elseif current_prompt and current_response then
 		table.insert(chat_history, { role = "user", content = current_prompt })
 		table.insert(chat_history, { role = "assistant", content = current_response })
 	end
 
-	-- Debug prints
 	print("Chat history entries:", #chat_history)
+
 	print("Latest prompt:", latest_prompt)
 
 	return chat_history, latest_prompt
@@ -61,7 +95,6 @@ local function stream_response_init()
 	api.nvim_buf_set_lines(0, 0, -1, false, lines)
 end
 
--- Function to handle streaming response
 local function handle_stream_line(data_line)
 	if not data_line or data_line == "" then
 		return
@@ -96,22 +129,26 @@ local function handle_stream_line(data_line)
 		table.remove(lines)
 	end
 
-	-- Split content into lines if it contains newlines
-	local content_lines = vim.split(content, "\n")
-
-	-- Handle each line of content
-	for i, content_line in ipairs(content_lines) do
-		if i == 1 then
-			-- First line: append to last existing line or create new line
-			local last_line = #lines > 0 and lines[#lines] or ""
-			if last_line == "" then
-				table.insert(lines, content_line)
+	-- Handle content
+	-- If content contains newlines or is a code block marker, split it
+	if content:match("\n") or content:match("```") then
+		-- Split content into lines
+		local content_lines = vim.split(content, "\n", { plain = true })
+		for i, line in ipairs(content_lines) do
+			if i == 1 and #lines > 0 then
+				-- Append to last line if it exists
+				lines[#lines] = lines[#lines] .. line
 			else
-				lines[#lines] = last_line .. content_line
+				-- Add as new line
+				table.insert(lines, line)
 			end
+		end
+	else
+		-- No newlines, append to last line or create new one
+		if #lines > 0 then
+			lines[#lines] = lines[#lines] .. content
 		else
-			-- Additional lines: add as new lines
-			table.insert(lines, content_line)
+			table.insert(lines, content)
 		end
 	end
 
@@ -127,8 +164,6 @@ function M.run_llm()
 	end
 
 	local api_key = os.getenv("OPENAI_API_KEY")
-	-- local api_key =
-	-- 	"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"
 	if not api_key then
 		print("Error: OPENAI_API_KEY is not set.")
 		return
@@ -145,7 +180,7 @@ function M.run_llm()
 
 	-- Prepare JSON data
 	local json_data = vim.json.encode({
-		model = "gpt-4",
+		model = "chatgpt-4o-latest",
 		messages = messages,
 		stream = true,
 	})
