@@ -3,17 +3,25 @@ local api = vim.api
 
 -- Function to process bash commands
 local function process_bash_commands(input_line)
-	for command in input_line:gmatch("@bash%(`(.-)`%)") do
+	-- Find all @bash(`...`) patterns
+	local pos = 1
+	while true do
+		local start_pos, end_pos, command = input_line:find("@bash%(`(.-)`%)", pos)
+		if not start_pos then break end
+		
 		local handle, err = io.popen(command)
-
 		if handle then
 			local result = handle:read("*a")
 			-- Trim any trailing newlines
 			result = result:gsub("%s+$", "")
-			input_line = input_line:gsub("@bash%(`" .. command .. "`%)", result)
+			-- Replace the exact command pattern with result
+			local pattern_to_replace = input_line:sub(start_pos, end_pos)
+			input_line = input_line:gsub(vim.pesc(pattern_to_replace), result, 1)
 		else
 			print("An error occurred when trying to execute the command: ", err)
 		end
+		
+		pos = start_pos + 1
 	end
 
 	return input_line
