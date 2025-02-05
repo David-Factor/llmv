@@ -1,32 +1,6 @@
 local M = {}
 local api = vim.api
 
--- Function to process bash commands
-local function process_bash_commands(input_line)
-	-- Find all @bash(`...`) patterns
-	local pos = 1
-	while true do
-		local start_pos, end_pos, command = input_line:find("@bash%(`(.-)`%)", pos)
-		if not start_pos then break end
-		
-		local handle, err = io.popen(command)
-		if handle then
-			local result = handle:read("*a")
-			-- Trim any trailing newlines
-			result = result:gsub("%s+$", "")
-			-- Replace the exact command pattern with result
-			local pattern_to_replace = input_line:sub(start_pos, end_pos)
-			input_line = input_line:gsub(vim.pesc(pattern_to_replace), result, 1)
-		else
-			print("An error occurred when trying to execute the command: ", err)
-		end
-		
-		pos = start_pos + 1
-	end
-
-	return input_line
-end
-
 -- Function to extract chat history
 local function extract_chat_parts()
 	local lines = api.nvim_buf_get_lines(0, 0, -1, false)
@@ -55,40 +29,78 @@ local function extract_chat_parts()
 		elseif in_prompt then
 			-- Accumulate prompt text
 			current_prompt = (current_prompt == "" and line or (current_prompt .. "\n" .. line))
-			latest_prompt = current_prompt -- Keep track of the latest prompt
+			latest_prompt = current_prompt
 		elseif in_response then
 			-- Accumulate response text
 			current_response = (current_response == "" and line or (current_response .. "\n" .. line))
 		end
 	end
 
-	-- Check if we ended with a prompt (no response yet)
+	-- Handle the last prompt if it exists
 	if in_prompt and current_prompt and current_prompt ~= "" then
-		-- Check if there's actually a bash command before processing
-		if current_prompt:match("@bash%(`.-`%)") then
-			latest_prompt = process_bash_commands(current_prompt)
+		latest_prompt = current_prompt
+		local original_lines = api.nvim_buf_get_lines(0, 0, -1, false)
+		local output_lines = {}
+		local last_line_index = #original_lines
 
-			-- Split the output into lines if it contains newlines
-			local output_lines = {}
-			table.insert(output_lines, "# Output:")
-			for line in latest_prompt:gmatch("[^\r\n]+") do
-				table.insert(output_lines, line)
+		-- Find all bash commands and collect their outputs
+		local command_outputs = {}
+		for line in latest_prompt:gmatch("[^\n]+") do
+			if line:match("^%s*@bash%(`.*`%)%s*$") then
+				-- Extract and execute the command
+				local command = line:match("^%s*@bash%(`(.+)`%)%s*$")
+				print("Line:", vim.inspect(line)) -- Debug line content
+				print("Command extraction attempt:", vim.inspect(command)) -- Debug extraction
+				print("Extracted command:", vim.inspect(command)) -- Debug print
+
+				if not command then
+					print("Failed to extract command from line:", line)
+					goto continue
+				end
+
+				local handle = io.popen(command)
+
+				if handle then
+					local result = handle:read("*a"):gsub("%s+$", "")
+					handle:close()
+
+					-- Store output lines for this command
+					local cmd_output = {}
+					table.insert(cmd_output, "# Output")
+					for result_line in result:gsub("\r\n?", "\n"):gmatch("[^\n]*") do
+						if result_line ~= "" then
+							table.insert(cmd_output, result_line)
+						end
+					end
+					table.insert(cmd_output, "# End Output")
+					table.insert(cmd_output, "")
+
+					-- Store in our collection
+					table.insert(command_outputs, cmd_output)
+				end
+				::continue::
 			end
-			table.insert(output_lines, "# End Output")
-
-			-- Set the lines properly
-			api.nvim_buf_set_lines(0, -1, -1, false, output_lines)
-		else
-			-- If no bash command, just use the prompt as is
-			latest_prompt = current_prompt
 		end
+
+		-- Now combine everything
+		local result_lines = {}
+		local output_index = 1
+		for line in latest_prompt:gmatch("[^\n]+") do
+			table.insert(result_lines, line)
+			if line:match("@bash%(`.-`%)") and command_outputs[output_index] then
+				for _, output_line in ipairs(command_outputs[output_index]) do
+					table.insert(result_lines, output_line)
+				end
+				output_index = output_index + 1
+			end
+		end
+
+		-- Set all the lines at once
+		api.nvim_buf_set_lines(0, 0, -1, false, result_lines)
 	elseif current_prompt and current_response then
 		table.insert(chat_history, { role = "user", content = current_prompt })
 		table.insert(chat_history, { role = "assistant", content = current_response })
 	end
-
-	print("Chat history entries:", #chat_history)
-	print("Latest prompt:", latest_prompt)
 
 	return chat_history, latest_prompt
 end
@@ -103,7 +115,7 @@ local function stream_response_init()
 end
 
 local function handle_stream_line(data_line)
-	print("Processing line:", vim.inspect(data_line)) -- Debug log
+	print("Processing line:", vim.inspect(data_line))
 
 	if not data_line or data_line == "" then
 		return
@@ -118,13 +130,13 @@ local function handle_stream_line(data_line)
 	-- Parse JSON and extract content
 	local success, decoded = pcall(vim.json.decode, clean_chunk)
 	if not success then
-		print("JSON decode failed:", vim.inspect(clean_chunk)) -- Debug log
+		print("JSON decode failed:", vim.inspect(clean_chunk))
 		return
 	end
 
 	-- Claude's streaming format
 	local content = decoded.delta and decoded.delta.text
-	print("Extracted content:", vim.inspect(content)) -- Debug log
+	print("Extracted content:", vim.inspect(content))
 
 	if not content or content == "" then
 		return
@@ -139,21 +151,17 @@ local function handle_stream_line(data_line)
 	end
 
 	-- Handle content
-	-- If content contains newlines or is a code block marker, split it
 	if content:match("\n") or content:match("```") then
 		-- Split content into lines
 		local content_lines = vim.split(content, "\n", { plain = true })
 		for i, line in ipairs(content_lines) do
 			if i == 1 and #lines > 0 then
-				-- Append to last line if it exists
 				lines[#lines] = lines[#lines] .. line
 			else
-				-- Add as new line
 				table.insert(lines, line)
 			end
 		end
 	else
-		-- No newlines, append to last line or create new one
 		if #lines > 0 then
 			lines[#lines] = lines[#lines] .. content
 		else
@@ -196,11 +204,11 @@ function M.run_llm()
 		model = "claude-3-5-sonnet-20241022",
 		messages = messages,
 		stream = true,
-		max_tokens = 4096, -- Maximum tokens for Sonnet
-		temperature = 0.7, -- Default temperature, adjust as needed
+		max_tokens = 4096,
+		temperature = 0.7,
 	})
 
-	print("Sending request to Claude API...") -- Debug log
+	print("Sending request to Claude API...")
 
 	-- Initialize response in buffer
 	stream_response_init()
@@ -208,9 +216,9 @@ function M.run_llm()
 	-- Make the request using vim.fn.jobstart
 	vim.fn.jobstart({
 		"curl",
-		"-N", -- Disable buffering
-		"-s", -- Silent mode
-		"-v", -- Add verbose output for debugging
+		"-N",
+		"-s",
+		"-v",
 		"https://api.anthropic.com/v1/messages",
 		"-H",
 		"Content-Type: application/json",
@@ -224,7 +232,7 @@ function M.run_llm()
 		stdout_buffered = false,
 		on_stdout = function(_, data)
 			if data then
-				print("Received stdout data:", vim.inspect(data)) -- Debug log
+				print("Received stdout data:", vim.inspect(data))
 				for _, line in ipairs(data) do
 					if line ~= "" then
 						vim.schedule(function()
@@ -236,7 +244,7 @@ function M.run_llm()
 		end,
 		on_stderr = function(_, data)
 			if data then
-				print("Received stderr data:", vim.inspect(data)) -- Debug log
+				print("Received stderr data:", vim.inspect(data))
 				for _, line in ipairs(data) do
 					if line ~= "" then
 						print("Error:", line)
@@ -245,7 +253,7 @@ function M.run_llm()
 			end
 		end,
 		on_exit = function(_, code)
-			print("Request finished with code:", code) -- Debug log
+			print("Request finished with code:", code)
 			if code ~= 0 then
 				print("Request failed with exit code:", code)
 			end
@@ -254,3 +262,4 @@ function M.run_llm()
 end
 
 return M
+
