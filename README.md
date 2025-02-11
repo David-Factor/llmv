@@ -261,6 +261,7 @@ return {
     },
     config = true,
 }
+```
 
 ## 🗺️ Roadmap
 
