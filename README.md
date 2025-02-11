@@ -42,8 +42,7 @@ All communication happens in regular Markdown files. Write your prompt after `>>
 
 ## ✨ See It In Action
 
-<pre>
-```markdown
+````markdown
 >>> Help me optimize this function
 @bash(`cat -n src/slow_function.py`)
 # Output
@@ -85,8 +84,7 @@ index a23bf35..7d2f3bc 100644
 -    return result
 +    return [item.transform() for item in items if item.is_valid()]
 # End Output
-```
-</pre>
+````
 
 ## 🚀 Quick Start
 
