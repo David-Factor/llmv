@@ -2,15 +2,19 @@ local M = {}
 local api = vim.api
 
 M.current_job = nil
--- Process the current buffer and expand any bash commands
+
+-- Process the current buffer and expand any non evaluated bash commands
 local function process_buffer()
 	local lines = api.nvim_buf_get_lines(0, 0, -1, false)
 	local result = {}
 	local messages = {}
 	local current = {}
 	local in_user = false
+	local i = 1
 
-	for i, line in ipairs(lines) do
+	while i <= #lines do
+		local line = lines[i]
+
 		if line:match("^>>>") then
 			if in_user and #current > 0 then
 				table.insert(messages, { role = "user", content = table.concat(current, "\n") })
@@ -28,23 +32,48 @@ local function process_buffer()
 		else
 			local cmd = line:match("^%s*@bash%(`(.+)`%)%s*$")
 			if cmd then
-				table.insert(result, line)
-				local output = vim.fn.system(cmd)
-				if output and output ~= "" then
-					table.insert(result, "<output>")
-					for _, out_line in ipairs(vim.split(output, "\n", { trimempty = true })) do
-						table.insert(result, out_line)
+				-- Check if this bash command has already been evaluated
+				local next_line = lines[i + 1]
+				if not (next_line and next_line:match("^<output>")) then
+					-- Command hasn't been evaluated yet
+					table.insert(result, line)
+					local output = vim.fn.system(cmd)
+					if output and output ~= "" then
+						table.insert(result, "<output>")
+						for _, out_line in ipairs(vim.split(output, "\n", { trimempty = true })) do
+							table.insert(result, out_line)
+						end
+						table.insert(result, "</output>")
+						table.insert(result, "")
+
+						-- Add to current message including the output
+						table.insert(current, line)
+						table.insert(current, "<output>")
+						for _, out_line in ipairs(vim.split(output, "\n", { trimempty = true })) do
+							table.insert(current, out_line)
+						end
+						table.insert(current, "</output>")
+						table.insert(current, "")
 					end
-					table.insert(result, "</output>")
-					table.insert(result, "")
-					-- Update current with expanded content
-					table.insert(current, line)
-					table.insert(current, "<output>")
-					for _, out_line in ipairs(vim.split(output, "\n", { trimempty = true })) do
-						table.insert(current, out_line)
+				else
+					-- Command has already been evaluated, copy existing command and output
+					table.insert(result, line)
+					while i + 1 <= #lines and not lines[i + 1]:match("^</output>$") do
+						i = i + 1
+						table.insert(result, lines[i])
+						table.insert(current, lines[i])
 					end
-					table.insert(current, "</output>")
-					table.insert(current, "")
+					-- Add closing tag and empty line
+					if i + 1 <= #lines then
+						i = i + 1
+						table.insert(result, lines[i])
+						table.insert(current, lines[i])
+						if i + 1 <= #lines and lines[i + 1] == "" then
+							i = i + 1
+							table.insert(result, lines[i])
+							table.insert(current, lines[i])
+						end
+					end
 				end
 			else
 				table.insert(result, line)
@@ -53,6 +82,7 @@ local function process_buffer()
 				end
 			end
 		end
+		i = i + 1
 	end
 
 	-- Handle final message
@@ -66,7 +96,6 @@ local function process_buffer()
 
 	-- Update buffer with expanded content
 	api.nvim_buf_set_lines(0, 0, -1, false, result)
-
 	return messages
 end
 
