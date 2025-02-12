@@ -92,7 +92,7 @@ index a23bf35..7d2f3bc 100644
 ```lua
 -- Using lazy.nvim
 {
-    'yourusername/llmv',
+    'David-Factor/llmv',
     cmd = { "Run", "Stop" },
     config = true,
 }
@@ -201,7 +201,7 @@ Here's the relevant code:
 
 ```lua
 {
-    'yourusername/llmv',
+    'David-Factor/llmv',
     cmd = { "Run", "Stop" },  -- Load plugin when these commands are used
     config = function()
         require('llmv').setup()  -- No configuration options currently available
@@ -214,7 +214,7 @@ Here's the relevant code:
 ```lua
 -- ~/.config/nvim/lua/plugins/llmv.lua
 return {
-    'yourusername/llmv',
+    'David-Factor/llmv',
     cmd = { "Run", "Stop" },
     config = true,
 }
@@ -224,7 +224,7 @@ return {
 
 ```lua
 use {
-    'yourusername/llmv',
+    'David-Factor/llmv',
     config = function()
         require('llmv').setup()
     end
@@ -253,7 +253,7 @@ Or if using LazyVim, you can add the keymaps in your plugin spec:
 ```lua
 -- ~/.config/nvim/lua/plugins/llmv.lua
 return {
-    'yourusername/llmv',
+    'David-Factor/llmv',
     cmd = { "Run", "Stop" },
     keys = {
         { "<leader>r", ":Run<CR>", desc = "Run LLM prompt" },
