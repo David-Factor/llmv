@@ -45,14 +45,14 @@ All communication happens in regular Markdown files. Write your prompt after `>>
 ````markdown
 >>> Help me optimize this function
 @bash(`cat -n src/slow_function.py`)
-# Output
+<output>
      1	def process_items(items):
      2	    result = []
      3	    for item in items:
      4	        if item.is_valid():
      5	            result.append(item.transform())
      6	    return result
-# End Output
+</output>
 
 <<< 
 Here's how we can improve the performance by using list comprehension 
@@ -70,7 +70,7 @@ This change:
 
 >>> Apply this change and show me the diff
 @bash(`git diff src/slow_function.py`)
-# Output
+<output>
 diff --git a/src/slow_function.py b/src/slow_function.py
 index a23bf35..7d2f3bc 100644
 --- a/src/slow_function.py
@@ -83,7 +83,7 @@ index a23bf35..7d2f3bc 100644
 -            result.append(item.transform())
 -    return result
 +    return [item.transform() for item in items if item.is_valid()]
-# End Output
+</output>
 ````
 
 ## 🚀 Quick Start
@@ -119,10 +119,10 @@ LLMV uses a simple but powerful pattern:
    ```markdown
    >>> What's in this file?
    @bash(`cat myfile.py`)
-   # Output
+   <output>
    def hello():
        print("Hello World")
-   # End Output
+   </output>
    ```
 
 2. **Command Evaluation**: Only the most recent prompt's commands are run when you execute `:Run`
@@ -131,11 +131,11 @@ LLMV uses a simple but powerful pattern:
    ```markdown
    >>> Update this function to be async
    @bash(`cat -n server.js`)
-   # Output
+   <output>
    1  function getData() {
    2    return db.query('SELECT * FROM users')
    3  }
-   # End Output
+   </output>
    
    <<< Here's an async version of your function:
    

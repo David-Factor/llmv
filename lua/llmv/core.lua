@@ -31,19 +31,19 @@ local function process_buffer()
 				table.insert(result, line)
 				local output = vim.fn.system(cmd)
 				if output and output ~= "" then
-					table.insert(result, "# Output")
+					table.insert(result, "<output>")
 					for _, out_line in ipairs(vim.split(output, "\n", { trimempty = true })) do
 						table.insert(result, out_line)
 					end
-					table.insert(result, "# End Output")
+					table.insert(result, "</output>")
 					table.insert(result, "")
 					-- Update current with expanded content
 					table.insert(current, line)
-					table.insert(current, "# Output")
+					table.insert(current, "<output>")
 					for _, out_line in ipairs(vim.split(output, "\n", { trimempty = true })) do
 						table.insert(current, out_line)
 					end
-					table.insert(current, "# End Output")
+					table.insert(current, "</output>")
 					table.insert(current, "")
 				end
 			else
@@ -188,4 +188,3 @@ function M.stop_llm()
 end
 
 return M
-
