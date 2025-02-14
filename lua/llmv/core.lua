@@ -2,6 +2,7 @@ local M = {}
 local api = vim.api
 
 M.current_job = nil
+M.target_buf = nil
 
 -- Process the current buffer and expand any non evaluated bash commands
 local function process_buffer()
@@ -120,7 +121,7 @@ local function handle_stream_line(line)
 		return
 	end
 
-	local lines = api.nvim_buf_get_lines(0, 0, -1, false)
+	local lines = api.nvim_buf_get_lines(M.target_buf, 0, -1, false)
 	if lines[#lines] == "Loading..." then
 		table.remove(lines)
 	end
@@ -135,7 +136,7 @@ local function handle_stream_line(line)
 		vim.list_extend(lines, new_lines)
 	end
 
-	api.nvim_buf_set_lines(0, 0, -1, false, lines)
+	api.nvim_buf_set_lines(M.target_buf, 0, -1, false, lines)
 end
 
 function M.run_llm()
@@ -144,6 +145,8 @@ function M.run_llm()
 		print("Error: ANTHROPIC_API_KEY is not set")
 		return
 	end
+
+	M.target_buf = api.nvim_get_current_buf()
 
 	local messages = process_buffer()
 	if #messages == 0 then
@@ -157,7 +160,7 @@ function M.run_llm()
 	-- Add response marker
 	local lines = api.nvim_buf_get_lines(0, 0, -1, false)
 	vim.list_extend(lines, { "<<<", "", "Loading..." })
-	api.nvim_buf_set_lines(0, 0, -1, false, lines)
+	api.nvim_buf_set_lines(M.target_buf, 0, -1, false, lines)
 
 	-- Make API request
 	local json_data = vim.json.encode({
