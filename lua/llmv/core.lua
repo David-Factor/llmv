@@ -16,12 +16,17 @@ local function process_buffer()
 	while i <= #lines do
 		local line = lines[i]
 
-		if line:match("^>>>") then
+		if line:match("^>>>%s*(.*)$") then
 			if in_user and #current > 0 then
 				table.insert(messages, { role = "user", content = table.concat(current, "\n") })
 			end
 			current = {}
 			in_user = true
+			-- Extract and add any text after ">>>"
+			local prompt_text = line:match("^>>>%s*(.*)$")
+			if prompt_text and prompt_text ~= "" then
+				table.insert(current, prompt_text)
+			end
 			table.insert(result, line)
 		elseif line:match("^<<<") then
 			if in_user and #current > 0 then
