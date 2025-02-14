@@ -17,8 +17,10 @@ local function process_buffer()
 		local line = lines[i]
 
 		if line:match("^>>>%s*(.*)$") then
-			if in_user and #current > 0 then
-				table.insert(messages, { role = "user", content = table.concat(current, "\n") })
+			-- Push any accumulated content with the proper role
+			if #current > 0 then
+				local role = in_user and "user" or "assistant"
+				table.insert(messages, { role = role, content = table.concat(current, "\n") })
 			end
 			current = {}
 			in_user = true
