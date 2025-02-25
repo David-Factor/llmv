@@ -99,3 +99,4 @@ end
 -- DO NOT require the module here; we'll register this provider from providers/init.lua
 
 return provider
+
