@@ -111,14 +111,13 @@ export ANTHROPIC_API_KEY='your-api-key-here'  # Currently supports Claude AI
 
 4. Run with `:Run` (or stop with `:Stop`)
 
+
 ## 🔧 How It Works
-
 LLMV uses a simple but powerful pattern:
-
-1. **File Access**: `@bash()` commands give the LLM quick access to your project:
+1. **File Access**: `@bash()` commands give the LLM quick access to your project. Commands are executed relative to the current file's directory:
    ```markdown
    >>> What's in this file?
-   @bash(`cat myfile.py`)
+   @bash(`cat ../src/myfile.py`)  # Relative to current file's location
    <output>
    def hello():
        print("Hello World")
@@ -194,6 +193,14 @@ Here's the relevant code:
 # Apply the suggested changes:
 @bash(`echo 'DIFF' | git apply`)
 ```
+
+### Project Navigation
+
+```markdown
+>>> Show me the project structure:
+@bash(`tree ..`)  # Navigate up one directory from current file
+```
+
 
 ## 📖 Detailed Installation
 

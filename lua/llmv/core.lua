@@ -4,6 +4,11 @@ local api = vim.api
 M.current_job = nil
 M.target_buf = nil
 
+local function get_current_file_dir()
+	local current_file = vim.fn.expand("%:p")
+	return vim.fn.fnamemodify(current_file, ":h")
+end
+
 -- Process the current buffer and expand any non evaluated bash commands
 local function process_buffer()
 	local lines = api.nvim_buf_get_lines(0, 0, -1, false)
@@ -12,6 +17,7 @@ local function process_buffer()
 	local current = {}
 	local in_user = false
 	local i = 1
+	local file_dir = get_current_file_dir()
 
 	while i <= #lines do
 		local line = lines[i]
@@ -45,7 +51,9 @@ local function process_buffer()
 				if not (next_line and next_line:match("^<output>")) then
 					-- Command hasn't been evaluated yet
 					table.insert(result, line)
-					local output = vim.fn.system(cmd)
+
+					local cd_cmd = string.format("cd %q && %s", file_dir, cmd)
+					local output = vim.fn.system(cd_cmd)
 					if output and output ~= "" then
 						table.insert(result, "<output>")
 						for _, out_line in ipairs(vim.split(output, "\n", { trimempty = true })) do
