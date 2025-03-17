@@ -1,8 +1,8 @@
 local M = {}
 local api = vim.api
 
-M.current_job = nil
 M.target_buf = nil
+M.options = {}
 
 local function get_current_file_dir()
 	local current_file = vim.fn.expand("%:p")
@@ -115,122 +115,109 @@ local function process_buffer()
 	return messages
 end
 
--- Handle streaming response
-local function handle_stream_line(line)
-	if not line or line == "" then
-		return
-	end
-
-	local content = line:gsub("^data: ", "")
-	if content == "[DONE]" then
-		return
-	end
-
-	local ok, decoded = pcall(vim.json.decode, content)
-	if not ok then
-		return
-	end
-
-	content = decoded.delta and decoded.delta.text
-	if not content or content == "" then
-		return
-	end
-
-	local lines = api.nvim_buf_get_lines(M.target_buf, 0, -1, false)
-	if lines[#lines] == "Loading..." then
-		table.remove(lines)
-	end
-
-	local new_lines = vim.split(content, "\n", { plain = true })
-	if #lines > 0 then
-		lines[#lines] = lines[#lines] .. new_lines[1]
-		for i = 2, #new_lines do
-			table.insert(lines, new_lines[i])
-		end
-	else
-		vim.list_extend(lines, new_lines)
-	end
-
-	api.nvim_buf_set_lines(M.target_buf, 0, -1, false, lines)
-end
-
 function M.run_llm()
-	local api_key = os.getenv("ANTHROPIC_API_KEY")
-	if not api_key then
-		print("Error: ANTHROPIC_API_KEY is not set")
-		return
-	end
-
 	M.target_buf = api.nvim_get_current_buf()
-
 	local messages = process_buffer()
 	if #messages == 0 then
 		print("No messages found")
 		return
 	end
 
-	-- Debug: Print messages being sent
-	print("Sending messages:", vim.inspect(messages))
-
-	-- Add response marker
-	local lines = api.nvim_buf_get_lines(0, 0, -1, false)
+	-- Add response marker - this is a UI concern that belongs in core
+	local lines = api.nvim_buf_get_lines(M.target_buf, 0, -1, false)
 	vim.list_extend(lines, { "<<<", "", "Loading..." })
 	api.nvim_buf_set_lines(M.target_buf, 0, -1, false, lines)
 
-	-- Make API request
-	local json_data = vim.json.encode({
-		model = "claude-3-5-sonnet-20241022",
-		messages = messages,
-		stream = true,
-		max_tokens = 4096,
-		temperature = 0.7,
-	})
+	-- Get the configured provider
+	local providers = require("llmv.providers")
+	local provider_name = M.options.provider or "anthropic"
+	local provider = providers.get(provider_name)
 
-	M.current_job = vim.fn.jobstart({
-		"curl",
-		"-N",
-		"-s",
-		"https://api.anthropic.com/v1/messages",
-		"-H",
-		"Content-Type: application/json",
-		"-H",
-		"x-api-key: " .. api_key,
-		"-H",
-		"anthropic-version: 2023-06-01",
-		"--data-raw",
-		json_data,
-	}, {
-		stdout_buffered = false,
-		on_stdout = function(_, data)
-			if not data then
-				return
+	if not provider then
+		print("Provider not found: " .. provider_name)
+		return
+	end
+
+	-- Run the provider's completion with callbacks
+	provider.complete(messages, {
+		on_chunk = function(content)
+			-- Update buffer with the new content
+			local buf_lines = api.nvim_buf_get_lines(M.target_buf, 0, -1, false)
+
+			-- Remove "Loading..." if it's there
+			if #buf_lines > 0 and buf_lines[#buf_lines] == "Loading..." then
+				table.remove(buf_lines)
 			end
-			for _, line in ipairs(data) do
-				if line ~= "" then
-					vim.schedule(function()
-						handle_stream_line(line)
-					end)
+
+			local new_lines = vim.split(content, "\n", { plain = true })
+			if #buf_lines > 0 then
+				buf_lines[#buf_lines] = buf_lines[#buf_lines] .. new_lines[1]
+				for i = 2, #new_lines do
+					table.insert(buf_lines, new_lines[i])
 				end
+			else
+				vim.list_extend(buf_lines, new_lines)
+			end
+
+			api.nvim_buf_set_lines(M.target_buf, 0, -1, false, buf_lines)
+		end,
+		on_error = function(err)
+			print("Error:", err)
+
+			-- Update buffer to show error
+			local buf_lines = api.nvim_buf_get_lines(M.target_buf, 0, -1, false)
+			-- Remove "Loading..." if it's there
+			if #buf_lines > 0 and buf_lines[#buf_lines] == "Loading..." then
+				table.remove(buf_lines)
+				table.insert(buf_lines, "Error: " .. err)
+				api.nvim_buf_set_lines(M.target_buf, 0, -1, false, buf_lines)
 			end
 		end,
-		on_stderr = function(_, data)
-			if not data then
-				return
-			end
-			for _, line in ipairs(data) do
-				if line ~= "" then
-					print("Error:", line)
-				end
-			end
+		on_complete = function()
+			-- Completion is handled implicitly as the buffer is already updated
+			-- Could add a notification or status message here if desired
 		end,
 	})
 end
 
 function M.stop_llm()
-	if M.current_job then
-		vim.fn.jobstop(M.current_job)
-		M.current_job = nil
-		print("Stopped LLM request")
+	local providers = require("llmv.providers")
+	local provider_name = M.options.provider or "anthropic"
+	local provider = providers.get(provider_name)
+
+	if provider and provider.stop then
+		if provider.stop() then
+			print("Stopped LLM request")
+
+			-- Update buffer to show stopped status
+			local buf_lines = api.nvim_buf_get_lines(M.target_buf, 0, -1, false)
+			-- Remove "Loading..." if it's there
+			if #buf_lines > 0 and buf_lines[#buf_lines] == "Loading..." then
+				table.remove(buf_lines)
+				table.insert(buf_lines, "[Request stopped]")
+				api.nvim_buf_set_lines(M.target_buf, 0, -1, false, buf_lines)
+			end
+		end
+	else
+		print("No active LLM request to stop")
+	end
+end
+
+function M.setup(opts)
+	M.options = opts or {}
+
+	-- Configure providers
+	local providers = require("llmv.providers")
+
+	-- Set up the default provider
+	local provider_name = M.options.provider or "anthropic"
+	local provider = providers.get(provider_name)
+
+	if provider then
+		local provider_opts = M.options.providers and M.options.providers[provider_name] or {}
+		provider.setup(provider_opts)
+	else
+		print("Warning: Provider not found: " .. provider_name)
 	end
 end
 

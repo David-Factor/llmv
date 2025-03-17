@@ -34,6 +34,7 @@ The answer is 4.
 >>> Tell me about this file:
 @bash(`cat myfile.txt`)
 
+
 <<< 
 Based on the file contents...
 ```
@@ -100,7 +101,7 @@ index a23bf35..7d2f3bc 100644
 
 2. Set your API key:
 ```bash
-export ANTHROPIC_API_KEY='your-api-key-here'  # Currently supports Claude AI
+export ANTHROPIC_API_KEY='your-api-key-here'  # For Claude AI (default)
 ```
 
 3. Start chatting:
@@ -130,6 +131,7 @@ LLMV uses a simple but powerful pattern:
    ```markdown
    >>> Update this function to be async
    @bash(`cat -n server.js`)
+
    <output>
    1  function getData() {
    2    return db.query('SELECT * FROM users')
@@ -175,6 +177,7 @@ Here's our current security policy:
 >>> Help debug this test failure:
 @bash(`cat test_output.log`)
 
+
 Here's the relevant code:
 @bash(`cat -n tests/auth_test.py`)
 ```
@@ -211,7 +214,17 @@ Here's the relevant code:
     'David-Factor/llmv',
     cmd = { "Run", "Stop" },  -- Load plugin when these commands are used
     config = function()
-        require('llmv').setup()  -- No configuration options currently available
+        require('llmv').setup({
+            -- Optional configuration
+            provider = "anthropic", -- Default provider
+            providers = {
+                anthropic = {
+                    model = "claude-3-5-sonnet-20241022", -- Default model
+                    max_tokens = 8192,
+                    temperature = 0.7,
+                }
+            }
+        })
     end,
 }
 ```
@@ -223,7 +236,16 @@ Here's the relevant code:
 return {
     'David-Factor/llmv',
     cmd = { "Run", "Stop" },
-    config = true,
+    opts = {
+        provider = "anthropic", -- Default provider
+        providers = {
+            anthropic = {
+                model = "claude-3-5-sonnet-20241022", -- Default model
+                max_tokens = 8192,
+                temperature = 0.7,
+            }
+        }
+    },
 }
 ```
 
@@ -233,7 +255,17 @@ return {
 use {
     'David-Factor/llmv',
     config = function()
-        require('llmv').setup()
+        require('llmv').setup({
+            -- Optional configuration
+            provider = "anthropic", -- Default provider
+            providers = {
+                anthropic = {
+                    model = "claude-3-5-sonnet-20241022", -- Default model
+                    max_tokens = 8192,
+                    temperature = 0.7,
+                }
+            }
+        })
     end
 }
 ```
@@ -266,13 +298,47 @@ return {
         { "<leader>r", ":Run<CR>", desc = "Run LLM prompt" },
         { "<leader>s", ":Stop<CR>", desc = "Stop LLM request" },
     },
-    config = true,
+    opts = {
+        provider = "anthropic",
+        providers = {
+            anthropic = {
+                model = "claude-3-5-sonnet-20241022",
+                max_tokens = 8192,
+                temperature = 0.7,
+            }
+        }
+    },
 }
+```
+
+## 🔌 Providers
+
+LLMV now supports a provider system for different LLM backends:
+
+### Currently Supported
+
+- **Anthropic (Claude)** - Default provider
+  - Requires `ANTHROPIC_API_KEY` environment variable
+  - Configurable model, max tokens, and temperature
+
+### Configuration
+
+```lua
+require('llmv').setup({
+    provider = "anthropic", -- Which provider to use
+    providers = {
+        anthropic = {
+            model = "claude-3-5-sonnet-20241022", -- Model to use
+            max_tokens = 8192, -- Maximum tokens in response
+            temperature = 0.7, -- Response randomness (0-1)
+        }
+    }
+})
 ```
 
 ## 🗺️ Roadmap
 
-- Support for additional LLM providers
+- Support for additional LLM providers (OpenAI, Ollama, etc.)
 - Custom prompt templates
 - Response formatting options
 
