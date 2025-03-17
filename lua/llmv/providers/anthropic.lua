@@ -7,7 +7,7 @@ local provider = {
 function provider.setup(opts)
 	provider.options = opts or {}
 	provider.options.model = provider.options.model or "claude-3-5-sonnet-20241022"
-	provider.options.max_tokens = provider.options.max_tokens or 4096
+	provider.options.max_tokens = provider.options.max_tokens or 8192
 	provider.options.temperature = provider.options.temperature or 0.7
 end
 
@@ -99,4 +99,3 @@ end
 -- DO NOT require the module here; we'll register this provider from providers/init.lua
 
 return provider
-
